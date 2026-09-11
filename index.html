@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스크래치 배경 움직임 원리 체험관</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Noto Sans KR) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+
+        .pixel-font {
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        /* Scratch Block Styles */
+        .scratch-block {
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            position: relative;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .scratch-event {
+            background-color: #ffbf00;
+            color: #573d00;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+        }
+
+        .scratch-control {
+            background-color: #ffab19;
+            color: white;
+        }
+
+        .scratch-motion {
+            background-color: #4c97ff;
+            color: white;
+        }
+
+        .scratch-block.active {
+            box-shadow: 0 0 15px #fde047;
+            transform: scale(1.02);
+            border: 2px solid #fde047;
+        }
+
+        /* Monitor Glass Glow */
+        .monitor-bezel {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.1);
+        }
+
+        .monitor-screen {
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-amber-500 selection:text-black">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-amber-500/20">
+                    <i class="fa-solid fa-puzzle-piece"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                        스크래치 배경 무한 스크롤 원리 체험관
+                    </h1>
+                    <p class="text-xs text-slate-400">액자(모니터)와 좌표 이동을 이용한 원근감 및 끊김 없는 배경 이동 시뮬레이터</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700/50 text-xs">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-slate-300 font-medium">스크래치 코딩 학습 모드</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto w-full p-4 sm:p-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Monitor Viewport & Controls -->
+        <div class="lg:col-span-7 flex flex-col gap-5">
+            
+            <!-- Monitor Box -->
+            <div class="monitor-bezel p-4 sm:p-6 rounded-3xl border border-slate-800 relative">
+                <!-- Monitor Header / Status Light -->
+                <div class="flex items-center justify-between mb-3 px-1">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-red-500/80 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+                        <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+                        <span class="ml-2 text-xs font-mono text-slate-400">SCRATCH_DISPLAY_STAGE (480x360 Ratio)</span>
+                    </div>
+                    <div id="statusBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-semibold">
+                        정지됨
+                    </div>
+                </div>
+
+                <!-- Canvas / Monitor Screen Container -->
+                <div class="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden monitor-screen border-2 border-slate-700/60 shadow-inner">
+                    <canvas id="stageCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+
+                    <!-- Frame Overlay Box Notice -->
+                    <div id="frameGuideLabel" class="absolute top-2 left-2 pointer-events-none bg-slate-900/80 backdrop-blur border border-slate-700/70 text-slate-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-lg">
+                        <i class="fa-solid fa-vector-square text-amber-400"></i>
+                        <span>중앙 영역: <strong>실제 모니터(액자) 화면</strong></span>
+                    </div>
+                </div>
+
+                <!-- Monitor Stand Simulation -->
+                <div class="w-32 h-4 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 mx-auto mt-2 rounded-b-md"></div>
+                <div class="w-48 h-2 bg-slate-800 mx-auto rounded-full shadow-md"></div>
+            </div>
+
+            <!-- Controls Panel -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <button id="btnToggle" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/30 flex items-center gap-2 min-w-[110px] justify-center">
+                            <i class="fa-solid fa-play" id="toggleIcon"></i> <span id="toggleText">시작</span>
+                        </button>
+                        <button id="btnReset" class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-200 font-medium rounded-xl transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-rotate-left"></i> 초기화
+                        </button>
+                    </div>
+
+                    <!-- Outside View Toggle -->
+                    <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 bg-slate-800/80 px-3 py-2 rounded-xl cursor-pointer border border-slate-700/60 hover:bg-slate-800 transition">
+                        <input type="checkbox" id="chkShowOutside" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 bg-slate-900 border-slate-700" checked>
+                        <span>액자 밖 전체 영역 보기</span>
+                    </label>
+                </div>
+
+                <hr class="border-slate-800">
+
+                <!-- Speed Control & Loop Options -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="speedSlider" class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-gauge-high text-amber-400"></i> 이동 속도 (x 좌표 증가량):
+                            </label>
+                            <span id="speedVal" class="text-xs font-mono font-bold text-amber-400">5 px/프레임</span>
+                        </div>
+                        <input type="range" id="speedSlider" min="1" max="10" value="5" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3 text-xs text-slate-400">
+                        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> 빨간점: 배경 1</span>
+                        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> 파란점: 배경 2</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Coordinates & Scratch Code Explanation -->
+        <div class="lg:col-span-5 flex flex-col gap-5">
+            
+            <!-- Real-time Coordinates Dashboard -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                <h2 class="text-sm font-bold text-slate-200 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-sky-400"></i> 실시간 배경 중심 x 좌표 상태
+                </h2>
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Background 1 Card -->
+                    <div class="bg-slate-950 p-3.5 rounded-xl border border-red-500/30 flex flex-col gap-1">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-red-400 font-bold flex items-center gap-1">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> 배경 1 (빨간점)
+                            </span>
+                            <span id="bg1Status" class="text-[10px] px-1.5 py-0.5 rounded bg-red-950 text-red-300 border border-red-800/50">액자 내</span>
+                        </div>
+                        <div class="text-2xl font-mono font-extrabold text-white mt-1">
+                            x: <span id="bg1XVal" class="text-red-400">0</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5">시작 위치: 액자 가운데 (x: 0)</p>
+                    </div>
+
+                    <!-- Background 2 Card -->
+                    <div class="bg-slate-950 p-3.5 rounded-xl border border-blue-500/30 flex flex-col gap-1">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-blue-400 font-bold flex items-center gap-1">
+                                <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 배경 2 (파란점)
+                            </span>
+                            <span id="bg2Status" class="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/50">액자 밖 (왼쪽)</span>
+                        </div>
+                        <div class="text-2xl font-mono font-extrabold text-white mt-1">
+                            x: <span id="bg2XVal" class="text-blue-400">-480</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5">시작 위치: 액자 왼쪽 (x: -480)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scratch Blocks Visualizer & Principle Explanation -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex-1 flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-code text-amber-400"></i> 스크래치 알고리즘 블록
+                    </h2>
+                    <span class="text-[11px] text-slate-400">오른쪽 이동 스크립트</span>
+                </div>
+
+                <!-- Simulated Scratch Canvas Code -->
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex-1 flex flex-col gap-2 font-sans overflow-x-auto">
+                    
+                    <!-- When Flag Clicked -->
+                    <div class="scratch-block scratch-event p-2.5 w-fit flex items-center gap-2 cursor-pointer shadow">
+                        <i class="fa-solid fa-flag text-green-700 bg-white p-1 rounded-full text-xs"></i>
+                        <span>[시작] 클릭했을 때</span>
+                    </div>
+
+                    <!-- Forever Loop Wrapper -->
+                    <div class="scratch-block scratch-control p-3 rounded-lg flex flex-col gap-2 pl-4 border-l-4 border-amber-600 bg-amber-500/10">
+                        <div class="flex items-center gap-2 text-amber-300 font-bold">
+                            <i class="fa-solid fa-arrows-spin"></i> 무한 반복하기
+                        </div>
+
+                        <!-- Motion Block: Change X -->
+                        <div id="blockChangeX" class="scratch-block scratch-motion p-2 px-3 rounded text-xs flex items-center gap-1 ml-2 transition">
+                            <span>x 좌표를</span>
+                            <span id="blockSpeedDisplay" class="bg-white text-slate-900 px-1.5 py-0.5 rounded font-mono font-bold">5</span>
+                            <span>만큼 바꾸기</span>
+                        </div>
+
+                        <!-- If Block: Loop Condition -->
+                        <div class="scratch-block scratch-control p-2.5 rounded text-xs ml-2 bg-amber-600/30 border border-amber-500/50 flex flex-col gap-1.5">
+                            <div class="flex items-center gap-1 flex-wrap text-amber-200">
+                                <span>만약</span>
+                                <span class="bg-emerald-700/80 text-white px-2 py-0.5 rounded-full font-mono text-[11px]">
+                                    x 좌표 &gt; 480
+                                </span>
+                                <span>라면</span>
+                            </div>
+
+                            <!-- Set X to -480 -->
+                            <div id="blockResetPos" class="scratch-block scratch-motion p-2 rounded text-xs ml-3 flex items-center gap-1 transition">
+                                <span>x 좌표를</span>
+                                <span class="bg-white text-slate-900 px-1.5 py-0.5 rounded font-mono font-bold">-480</span>
+                                <span>으로 정하기</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Explanatory Text Box -->
+                <div class="mt-4 bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/50 text-xs text-slate-300 space-y-1.5">
+                    <p class="font-bold text-amber-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-lightbulb"></i> 핵심 원리 요약
+                    </p>
+                    <p class="leading-relaxed">
+                        1. <strong>배경 1</strong>은 액자 가운데(x: 0), <strong>배경 2</strong>는 액자 왼쪽(x: -480)에서 동시에 오른쪽으로 이동합니다.<br>
+                        2. 액자 오른쪽 끝(x: 480)을 완전히 벗어나면, 순식간에 다시 액자 왼쪽(x: -480)으로 이동하여 뒤따라옵니다.
+                    </p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-800 py-3 text-center text-xs text-slate-500">
+        스크래치(Scratch) 교육용 배경 스크롤 시뮬레이션 인터랙티브 가이드
+    </footer>
+
+    <script>
+        // DOM Elements
+        const canvas = document.getElementById('stageCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const btnToggle = document.getElementById('btnToggle');
+        const toggleIcon = document.getElementById('toggleIcon');
+        const toggleText = document.getElementById('toggleText');
+        const btnReset = document.getElementById('btnReset');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedVal = document.getElementById('speedVal');
+        const chkShowOutside = document.getElementById('chkShowOutside');
+        const statusBadge = document.getElementById('statusBadge');
+
+        const bg1XVal = document.getElementById('bg1XVal');
+        const bg2XVal = document.getElementById('bg2XVal');
+        const bg1Status = document.getElementById('bg1Status');
+        const bg2Status = document.getElementById('bg2Status');
+
+        const blockChangeX = document.getElementById('blockChangeX');
+        const blockResetPos = document.getElementById('blockResetPos');
+        const blockSpeedDisplay = document.getElementById('blockSpeedDisplay');
+
+        // Simulation Variables
+        const SCRATCH_WIDTH = 480;
+        const SCRATCH_HEIGHT = 360;
+
+        let isRunning = false;
+        let speed = parseInt(speedSlider.value, 10);
+        let animationFrameId = null;
+
+        // Background X positions (relative to Scratch coordinate system where 0 is center)
+        let bg1X = 0;      // Background 1 starts at center
+        let bg2X = -480;   // Background 2 starts at left side
+
+        // High resolution setup for crisp canvas
+        function setupCanvasSize() {
+            const rect = canvas.getBoundingClientRect();
+            // We draw in scaled coordinate system so logic stays simple
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+        }
+
+        window.addEventListener('resize', () => {
+            setupCanvasSize();
+            render();
+        });
+
+        function updatePositions() {
+            if (!isRunning) return;
+
+            // Both move right (+speed)
+            bg1X += speed;
+            bg2X += speed;
+
+            // Check boundary reset (Scratch logic: if x >= 480, jump back to -480)
+            let bg1Resetting = false;
+            let bg2Resetting = false;
+
+            if (bg1X >= SCRATCH_WIDTH) {
+                bg1X = bg2X - SCRATCH_WIDTH; // Seamless snap behind Bg2
+                bg1Resetting = true;
+            }
+
+            if (bg2X >= SCRATCH_WIDTH) {
+                bg2X = bg1X - SCRATCH_WIDTH; // Seamless snap behind Bg1
+                bg2Resetting = true;
+            }
+
+            // Highlight Scratch blocks visually when action happens
+            if (bg1Resetting || bg2Resetting) {
+                blockResetPos.classList.add('active');
+                setTimeout(() => blockResetPos.classList.remove('active'), 250);
+            } else {
+                blockChangeX.classList.add('active');
+            }
+
+            updateDashboard();
+        }
+
+        function updateDashboard() {
+            bg1XVal.textContent = Math.round(bg1X);
+            bg2XVal.textContent = Math.round(bg2X);
+
+            // Update visible status tags
+            updateStatusTag(bg1X, bg1Status, "배경 1");
+            updateStatusTag(bg2X, bg2Status, "배경 2");
+        }
+
+        function updateStatusTag(x, element, name) {
+            // Screen range in Scratch coordinates is -240 to +240
+            if (x >= -240 && x <= 240) {
+                element.textContent = "액자 내 (보임)";
+                element.className = "text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/50";
+            } else if (x < -240) {
+                element.textContent = "액자 밖 (왼쪽 대기)";
+                element.className = "text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700";
+            } else {
+                element.textContent = "액자 밖 (오른쪽 이동됨)";
+                element.className = "text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700";
+            }
+        }
+
+        // Pixel Art Background Renderer matching user's image
+        function drawSingleBackground(ctxX, ctxY, width, height, dotColor, labelText, bgIndex) {
+            ctx.save();
+            ctx.translate(ctxX, ctxY);
+
+            // 1. Sky background (light sky blue like in provided image)
+            ctx.fillStyle = '#eaf4fc';
+            ctx.fillRect(0, 0, width, height);
+
+            // Subtle grid pattern representing pixel canvas background
+            ctx.strokeStyle = '#e0edf8';
+            ctx.lineWidth = 1;
+            const gridSize = width / 24;
+            for (let x = 0; x <= width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+
+            // 2. Pixel clouds (Matching clouds in user image)
+            drawPixelCloud(width * 0.2, height * 0.45, width * 0.08, width * 0.04);
+            drawPixelCloud(width * 0.35, height * 0.65, width * 0.06, width * 0.035);
+            drawPixelCloud(width * 0.52, height * 0.55, width * 0.07, width * 0.038);
+            drawPixelCloud(width * 0.68, height * 0.32, width * 0.08, width * 0.04);
+            drawPixelCloud(width * 0.78, height * 0.68, width * 0.07, width * 0.035);
+
+            // 3. Green Grass Footer (matching bottom grass strip)
+            const grassHeight = height * 0.16;
+            const grassY = height - grassHeight;
+
+            // Dark green border line top of grass
+            ctx.fillStyle = '#558b2f';
+            ctx.fillRect(0, grassY - 2, width, 2);
+
+            // Vibrant grass green
+            ctx.fillStyle = '#8bc34a';
+            ctx.fillRect(0, grassY, width, grassHeight);
+
+            // Grass pixel texture dots
+            ctx.fillStyle = '#558b2f';
+            for (let x = 10; x < width; x += 16) {
+                ctx.fillRect(x, grassY + 8, 3, 3);
+                ctx.fillRect(x + 6, grassY + 16, 3, 3);
+            }
+
+            // 4. Center Dot (빨간점 for BG1, 파란점 for BG2)
+            const centerX = width / 2;
+            const centerY = height / 2;
+
+            // Crosshair guide lines
+            ctx.strokeStyle = dotColor === 'red' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)';
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1.5;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX, 0);
+            ctx.lineTo(centerX, height);
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(width, centerY);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset line dash
+
+            // Draw Dot Outer Pulsing Ring
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 14, 0, Math.PI * 2);
+            ctx.fillStyle = dotColor === 'red' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(59, 130, 246, 0.25)';
+            ctx.fill();
+
+            // Draw Solid Center Dot
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+            ctx.fillStyle = dotColor === 'red' ? '#ef4444' : '#3b82f6';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            // Label text over dot
+            ctx.fillStyle = '#0f172a';
+            ctx.font = 'bold 12px "Noto Sans KR", sans-serif';
+            ctx.textAlign = 'center';
+
+            // Background banner badge over marker
+            const labelStr = `배경 ${bgIndex} (${dotColor === 'red' ? '빨간점' : '파란점'})`;
+            const textWidth = ctx.measureText(labelStr).width;
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.fillRect(centerX - textWidth/2 - 8, centerY - 32, textWidth + 16, 20);
+            ctx.strokeStyle = dotColor === 'red' ? '#ef4444' : '#3b82f6';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(centerX - textWidth/2 - 8, centerY - 32, textWidth + 16, 20);
+
+            ctx.fillStyle = dotColor === 'red' ? '#b91c1c' : '#1d4ed8';
+            ctx.fillText(labelStr, centerX, centerY - 18);
+
+            ctx.restore();
+        }
+
+        // Draw retro pixel styled cloud
+        function drawPixelCloud(cx, cy, w, h) {
+            ctx.save();
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#81d4fa';
+            ctx.lineWidth = 2;
+
+            // Simple pixel cloud geometry
+            ctx.beginPath();
+            ctx.roundRect(cx - w/2, cy - h/2, w, h, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            // Top bubble
+            ctx.beginPath();
+            ctx.arc(cx - w*0.15, cy - h*0.35, h*0.5, 0, Math.PI * 2);
+            ctx.arc(cx + w*0.15, cy - h*0.35, h*0.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Main Render Function
+        function render() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Dark background for canvas outside
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(0, 0, w, h);
+
+            const showOutside = chkShowOutside.checked;
+
+            // Frame dimensions inside canvas:
+            // Frame is 1/2 of overall canvas width if outside view is enabled,
+            // or 100% of canvas if outside view is off.
+            let frameW, frameH, frameX, frameY;
+
+            if (showOutside) {
+                // Shrink viewport so students can see outside the frame
+                frameW = w * 0.45;
+                frameH = frameW * (SCRATCH_HEIGHT / SCRATCH_WIDTH);
+                frameX = (w - frameW) / 2;
+                frameY = (h - frameH) / 2;
+            } else {
+                // Full view
+                frameW = w;
+                frameH = h;
+                frameX = 0;
+                frameY = 0;
+            }
+
+            // Scale ratio from Scratch coordinates (-240..+240) to screen pixel coordinates
+            const scale = frameW / SCRATCH_WIDTH;
+
+            // Helper function to map Scratch X pos to Canvas X coordinate
+            function scratchXToCanvasX(sx) {
+                // sx = 0 corresponds to center of frame
+                return frameX + (frameW / 2) + (sx * scale) - (frameW / 2);
+            }
+
+            const canvasBg1X = scratchXToCanvasX(bg1X);
+            const canvasBg2X = scratchXToCanvasX(bg2X);
+
+            // Set Clipping mask if NOT showing outside, or draw viewport border if showing outside
+            if (!showOutside) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, w, h);
+                ctx.clip();
+            } else {
+                // Draw dimmed background area outside monitor frame
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+                ctx.fillRect(0, 0, w, h);
+            }
+
+            // Draw Background 1 (Red Dot)
+            drawSingleBackground(canvasBg1X, frameY, frameW, frameH, 'red', '배경 1', 1);
+
+            // Draw Background 2 (Blue Dot)
+            drawSingleBackground(canvasBg2X, frameY, frameW, frameH, 'blue', '배경 2', 2);
+
+            if (!showOutside) {
+                ctx.restore();
+            } else {
+                // Draw Frame Outline / Frame Box (액자) when outside mode is checked
+                ctx.save();
+
+                // Darken outside area slightly using fill cut-out
+                ctx.fillStyle = 'rgba(2, 6, 23, 0.65)';
+                // Top overlay
+                ctx.fillRect(0, 0, w, frameY);
+                // Bottom overlay
+                ctx.fillRect(0, frameY + frameH, w, h - (frameY + frameH));
+                // Left overlay
+                ctx.fillRect(0, frameY, frameX, frameH);
+                // Right overlay
+                ctx.fillRect(frameX + frameW, frameY, w - (frameX + frameW), frameH);
+
+                // Frame Border (Yellow Glow Box)
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(frameX, frameY, frameW, frameH);
+
+                // Frame Corner Labels
+                ctx.fillStyle = '#f59e0b';
+                ctx.font = 'bold 13px "Noto Sans KR", sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('🖼️ 액자 (실제 화면 출력 영역)', frameX + 10, frameY - 10);
+
+                ctx.restore();
+            }
+        }
+
+        // Animation Loop
+        function gameLoop() {
+            updatePositions();
+            render();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // Toggle state function
+        function updateToggleState(running) {
+            isRunning = running;
+            if (isRunning) {
+                btnToggle.className = 'px-5 py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold rounded-xl transition-all shadow-lg shadow-rose-600/30 flex items-center gap-2 min-w-[110px] justify-center';
+                toggleIcon.className = 'fa-solid fa-pause';
+                toggleText.textContent = '정지';
+                statusBadge.textContent = '▶ 작동 중';
+                statusBadge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-semibold animate-pulse';
+            } else {
+                btnToggle.className = 'px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/30 flex items-center gap-2 min-w-[110px] justify-center';
+                toggleIcon.className = 'fa-solid fa-play';
+                toggleText.textContent = '시작';
+                statusBadge.textContent = '⏸ 정지됨';
+                statusBadge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-800 font-semibold';
+                blockChangeX.classList.remove('active');
+                blockResetPos.classList.remove('active');
+            }
+        }
+
+        // Event Listeners
+        btnToggle.addEventListener('click', () => {
+            updateToggleState(!isRunning);
+        });
+
+        btnReset.addEventListener('click', () => {
+            updateToggleState(false);
+            bg1X = 0;
+            bg2X = -480;
+            statusBadge.textContent = '초기화됨';
+            statusBadge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-semibold';
+            updateDashboard();
+            render();
+        });
+
+        speedSlider.addEventListener('input', (e) => {
+            speed = parseInt(e.target.value, 10);
+            speedVal.textContent = `${speed} px/프레임`;
+            blockSpeedDisplay.textContent = speed;
+        });
+
+        chkShowOutside.addEventListener('change', () => {
+            render();
+        });
+
+        // Initialize on page load
+        window.onload = function() {
+            setupCanvasSize();
+            updateDashboard();
+            render();
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
